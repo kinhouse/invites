@@ -1,0 +1,93 @@
+#!/usr/bin/env python2
+
+import StringIO
+import csv
+
+from PyPDF2 import PdfFileWriter, PdfFileReader
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
+
+
+def get_recipients(filename):
+    recipients = []
+    with open(filename, 'rb') as f:
+        for row in csv.reader(f):
+            if row[0] == '':
+                continue
+            names = row[1].split('\n')
+            address_lines = row[3].split('\n')
+            recipients.append(names + address_lines)
+    if len(recipients) % 2 == 1:
+        recipients.append([])
+    return recipients
+
+
+def get_page_data(recipients):
+    return zip(recipients[::2], recipients[1::2])
+
+
+def create_data_overlay_page(recipients):
+    # modified from http://stackoverflow.com/a/17538003
+    inch = 72
+    layout = {'left': 3.8 * inch,
+              'top': 7.2 * inch,
+              'lspacing': 12,
+              'fspacing': 5 * inch}
+    packet = StringIO.StringIO()
+    c = canvas.Canvas(packet, pagesize=letter)
+    c.setFont("Courier", 10)
+    for ri, recipient in enumerate(recipients):
+        for i, line in enumerate(recipient):
+            y = layout['top'] - ri * \
+                layout['fspacing'] - i * layout['lspacing']
+            c.drawString(layout['left'], y, line)
+    c.save()
+    packet.seek(0)
+    return PdfFileReader(packet).getPage(0)
+
+
+def merge_and_save(output_filename, template_page, data_page):
+    data_page.mergePage(template_page)
+
+    output_pdf = PdfFileWriter()
+    output_pdf.addPage(data_page)
+    outputStream = file(output_filename, "wb")
+    output_pdf.write(outputStream)
+    outputStream.close()
+
+
+def build_full_pdf(
+        output_filename,
+        front_page,
+        back_template_page,
+        back_page_data):
+    output_pdf = PdfFileWriter()
+
+    for data in back_page_data:
+        output_pdf.addPage(front_page)
+
+        back_page = create_data_overlay_page(data)
+        back_page.mergePage(back_template_page)
+        output_pdf.addPage(back_page)
+
+    outputStream = file(output_filename, "wb")
+    output_pdf.write(outputStream)
+    outputStream.close()
+
+
+recipients = get_recipients('data.csv')
+page_data = get_page_data(recipients)
+
+back_template_page = PdfFileReader(
+    file("pdf_templates/back.pdf", "rb")).getPage(0)
+front_page = PdfFileReader(
+    file(
+        "pdf_templates/front.pdf",
+        "rb")).getPage(0).rotateCounterClockwise(90)
+
+
+build_full_pdf(
+    'output/generated.pdf',
+    front_page,
+    back_template_page,
+    page_data)
