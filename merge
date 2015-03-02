@@ -60,7 +60,8 @@ def build_full_pdf(
         output_filename,
         front_page,
         back_template_page,
-        back_page_data):
+        back_page_data,
+        extra_blanks=1):
     output_pdf = PdfFileWriter()
 
     for data in back_page_data:
@@ -69,6 +70,10 @@ def build_full_pdf(
         back_page = create_data_overlay_page(data)
         back_page.mergePage(back_template_page)
         output_pdf.addPage(back_page)
+
+    for i in range(extra_blanks):
+        output_pdf.addPage(front_page)
+        output_pdf.addPage(back_template_page)
 
     outputStream = file(output_filename, "wb")
     output_pdf.write(outputStream)
