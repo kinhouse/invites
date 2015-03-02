@@ -1,0 +1,9 @@
+#!/bin/bash
+
+# render SVG files into PDF files which serve as templates for the merge process
+
+INKSCAPE='/Applications/Inkscape.app/Contents/Resources/bin/inkscape'
+DIR=$(dirname $0)
+
+$INKSCAPE -A pdf_templates/front.pdf  svgs/front.svg
+$INKSCAPE -A pdf_templates/back.pdf   svgs/back.svg
