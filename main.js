@@ -1,3 +1,12 @@
+import {
+  computePresetDate,
+  parseCustomDate,
+  formatRelative,
+  formatDisplayDate,
+  buildDateStrings,
+  buildGCalUrl,
+} from './lib.js'
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {})
@@ -17,56 +26,26 @@ const resetBtn = document.getElementById('reset-btn')
 const resultDate = document.getElementById('result-date')
 const liveCountdown = document.getElementById('live-countdown')
 
-// Set min selectable date to tomorrow
 const tomorrow = new Date()
 tomorrow.setDate(tomorrow.getDate() + 1)
 customDateInput.min = tomorrow.toISOString().split('T')[0]
 
 function getTargetDate() {
   if (presetSelect.value === 'custom') {
-    if (!customDateInput.value) return null
-    const [y, m, d] = customDateInput.value.split('-').map(Number)
-    return new Date(y, m - 1, d)
+    return customDateInput.value ? parseCustomDate(customDateInput.value) : null
   }
-  const d = new Date()
-  d.setFullYear(d.getFullYear() + parseInt(presetSelect.value))
-  return d
-}
-
-function formatRelative(date) {
-  const msPerDay = 86_400_000
-  const totalDays = Math.floor((date - Date.now()) / msPerDay)
-  if (totalDays <= 0) return 'That date has already passed'
-
-  const years = Math.floor(totalDays / 365.25)
-  const leftoverDays = totalDays - Math.floor(years * 365.25)
-  const months = Math.floor(leftoverDays / 30.44)
-  const days = Math.floor(leftoverDays - months * 30.44)
-
-  const parts = []
-  if (years) parts.push(`${years} year${years !== 1 ? 's' : ''}`)
-  if (months) parts.push(`${months} month${months !== 1 ? 's' : ''}`)
-  if (days || !parts.length) parts.push(`${days} day${days !== 1 ? 's' : ''}`)
-
-  return parts.join(', ')
-}
-
-function formatDisplayDate(date) {
-  return date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+  return computePresetDate(parseInt(presetSelect.value))
 }
 
 function updateLiveCountdown() {
   const target = getTargetDate()
-  if (!target) {
-    liveCountdown.textContent = ''
-    return
-  }
-  liveCountdown.textContent = `${formatDisplayDate(target)} — ${formatRelative(target)} away`
+  liveCountdown.textContent = target
+    ? `${formatDisplayDate(target)} — ${formatRelative(target)} away`
+    : ''
 }
 
 presetSelect.addEventListener('change', () => {
-  const isCustom = presetSelect.value === 'custom'
-  customDateField.hidden = !isCustom
+  customDateField.hidden = presetSelect.value !== 'custom'
   updateLiveCountdown()
 })
 
@@ -76,55 +55,23 @@ allDayCheckbox.addEventListener('change', () => {
   timeFields.hidden = allDayCheckbox.checked
 })
 
-function padDate(date) {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}${m}${d}`
-}
-
 form.addEventListener('submit', e => {
   e.preventDefault()
 
   const title = document.getElementById('title').value.trim()
-  if (!title) {
-    document.getElementById('title').focus()
-    return
-  }
+  if (!title) { document.getElementById('title').focus(); return }
 
   const target = getTargetDate()
-  if (!target) {
-    customDateInput.focus()
-    return
-  }
+  if (!target) { customDateInput.focus(); return }
 
   const allDay = allDayCheckbox.checked
   const description = document.getElementById('description').value.trim()
   const location = document.getElementById('location').value.trim()
+  const startTime = document.getElementById('start-time').value
+  const endTime = document.getElementById('end-time').value
 
-  let startStr, endStr
-  if (allDay) {
-    startStr = padDate(target)
-    const next = new Date(target)
-    next.setDate(next.getDate() + 1)
-    endStr = padDate(next)
-  } else {
-    const [sh, sm] = document.getElementById('start-time').value.split(':')
-    const [eh, em] = document.getElementById('end-time').value.split(':')
-    const base = padDate(target)
-    startStr = `${base}T${sh}${sm}00`
-    endStr = `${base}T${eh}${em}00`
-  }
-
-  const params = new URLSearchParams({
-    action: 'TEMPLATE',
-    text: title,
-    dates: `${startStr}/${endStr}`,
-  })
-  if (description) params.set('details', description)
-  if (location) params.set('location', location)
-
-  const url = `https://calendar.google.com/calendar/render?${params}`
+  const { startStr, endStr } = buildDateStrings(target, { allDay, startTime, endTime })
+  const url = buildGCalUrl({ title, startStr, endStr, description, location })
 
   gcalLink.href = url
   resultDate.innerHTML = `<strong>${formatDisplayDate(target)}</strong>${formatRelative(target)} from now`
