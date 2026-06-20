@@ -1,0 +1,99 @@
+import {
+  computePresetDate,
+  parseCustomDate,
+  formatRelative,
+  formatDisplayDate,
+  buildDateStrings,
+  buildGCalUrl,
+} from './lib.js'
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {})
+  })
+}
+
+const presetSelect = document.getElementById('date-preset')
+const customDateField = document.getElementById('custom-date-field')
+const customDateInput = document.getElementById('custom-date')
+const allDayCheckbox = document.getElementById('all-day')
+const timeFields = document.getElementById('time-fields')
+const form = document.getElementById('invite-form')
+const result = document.getElementById('result')
+const gcalLink = document.getElementById('gcal-link')
+const copyBtn = document.getElementById('copy-btn')
+const resetBtn = document.getElementById('reset-btn')
+const resultDate = document.getElementById('result-date')
+const liveCountdown = document.getElementById('live-countdown')
+
+const tomorrow = new Date()
+tomorrow.setDate(tomorrow.getDate() + 1)
+customDateInput.min = tomorrow.toISOString().split('T')[0]
+
+function getTargetDate() {
+  if (presetSelect.value === 'custom') {
+    return customDateInput.value ? parseCustomDate(customDateInput.value) : null
+  }
+  return computePresetDate(parseInt(presetSelect.value))
+}
+
+function updateLiveCountdown() {
+  const target = getTargetDate()
+  liveCountdown.textContent = target
+    ? `${formatDisplayDate(target)} — ${formatRelative(target)} away`
+    : ''
+}
+
+presetSelect.addEventListener('change', () => {
+  customDateField.hidden = presetSelect.value !== 'custom'
+  updateLiveCountdown()
+})
+
+customDateInput.addEventListener('input', updateLiveCountdown)
+
+allDayCheckbox.addEventListener('change', () => {
+  timeFields.hidden = allDayCheckbox.checked
+})
+
+form.addEventListener('submit', e => {
+  e.preventDefault()
+
+  const title = document.getElementById('title').value.trim()
+  if (!title) { document.getElementById('title').focus(); return }
+
+  const target = getTargetDate()
+  if (!target) { customDateInput.focus(); return }
+
+  const allDay = allDayCheckbox.checked
+  const description = document.getElementById('description').value.trim()
+  const location = document.getElementById('location').value.trim()
+  const startTime = document.getElementById('start-time').value
+  const endTime = document.getElementById('end-time').value
+
+  const { startStr, endStr } = buildDateStrings(target, { allDay, startTime, endTime })
+  const url = buildGCalUrl({ title, startStr, endStr, description, location })
+
+  gcalLink.href = url
+  resultDate.innerHTML = `<strong>${formatDisplayDate(target)}</strong>${formatRelative(target)} from now`
+  form.hidden = true
+  result.hidden = false
+  result.scrollIntoView({ behavior: 'smooth', block: 'start' })
+})
+
+copyBtn.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(gcalLink.href)
+    copyBtn.textContent = 'Copied!'
+  } catch {
+    copyBtn.textContent = 'Copy failed'
+  }
+  setTimeout(() => { copyBtn.textContent = 'Copy link' }, 2000)
+})
+
+resetBtn.addEventListener('click', () => {
+  result.hidden = true
+  form.hidden = false
+  form.scrollIntoView({ behavior: 'smooth', block: 'start' })
+})
+
+updateLiveCountdown()
